@@ -197,6 +197,19 @@ func TestExecuteOnDiskRepoObservesStaged(t *testing.T) {
 	require.Contains(t, stdout.String(), "rename variable x to y")
 }
 
+func TestRootCmdVersion(t *testing.T) {
+	old := Version
+	t.Cleanup(func() { Version = old })
+	Version = "v1.2.3"
+	cmd := NewRootCmd()
+	require.Equal(t, "v1.2.3", cmd.Version)
+	var stdout bytes.Buffer
+	cmd.SetOut(&stdout)
+	cmd.SetArgs([]string{"--version"})
+	require.NoError(t, cmd.Execute())
+	require.Contains(t, stdout.String(), "v1.2.3")
+}
+
 func TestRootCmdDefaults(t *testing.T) {
 	t.Parallel()
 	cmd := NewRootCmd()

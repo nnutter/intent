@@ -34,6 +34,12 @@ const (
 	FormatJSON = "json"
 )
 
+// Version is the binary version reported by --version.
+// Override it when building:
+//
+//	go build -ldflags "-X github.com/nnutter/intent/internal/cli.Version=v1.2.3" .
+var Version = "dev"
+
 // Options configures one observation run.
 type Options struct {
 	// Scope selects auto, staged, or worktree. Empty means auto.
@@ -185,8 +191,9 @@ func writeJSON(
 func NewRootCmd() *cobra.Command {
 	var repoPath, scopeOpt, formatOpt string
 	cmd := &cobra.Command{
-		Use:   "intent",
-		Short: "List Go refactorings in observed changes",
+		Use:     "intent",
+		Version: Version,
+		Short:   "List Go refactorings in observed changes",
 		Long: `Observe recent Go changes and list detected refactorings.
 
 When staged changes are present only the staged set (HEAD versus the
@@ -220,5 +227,5 @@ func Execute(ctx context.Context, args []string, stdout, stderr io.Writer) error
 	root.SetArgs(args)
 	root.SetOut(stdout)
 	root.SetErr(stderr)
-	return charmfang.Execute(ctx, root)
+	return charmfang.Execute(ctx, root, charmfang.WithVersion(Version))
 }
