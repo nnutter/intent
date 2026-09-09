@@ -192,16 +192,14 @@ func TestExecuteOnDiskRepoObservesStaged(t *testing.T) {
 
 	var stdout, stderr bytes.Buffer
 	require.NoError(t, Execute(context.Background(),
-		[]string{"--repo", dir}, &stdout, &stderr))
+		[]string{"--repo", dir}, &stdout, &stderr, "dev"))
 	require.Contains(t, stdout.String(), "scope: staged")
 	require.Contains(t, stdout.String(), "rename variable x to y")
 }
 
 func TestRootCmdVersion(t *testing.T) {
-	old := Version
-	t.Cleanup(func() { Version = old })
-	Version = "v1.2.3"
-	cmd := NewRootCmd()
+	t.Parallel()
+	cmd := NewRootCmd("v1.2.3")
 	require.Equal(t, "v1.2.3", cmd.Version)
 	var stdout bytes.Buffer
 	cmd.SetOut(&stdout)
@@ -212,7 +210,7 @@ func TestRootCmdVersion(t *testing.T) {
 
 func TestRootCmdDefaults(t *testing.T) {
 	t.Parallel()
-	cmd := NewRootCmd()
+	cmd := NewRootCmd("dev")
 	require.Equal(t, "intent", cmd.Use)
 	require.NoError(t, cmd.ParseFlags([]string{}))
 	repo, err := cmd.Flags().GetString("repo")
