@@ -26,6 +26,7 @@ type varDef struct {
 	initExpr   ast.Expr
 	typeHash   uint64
 	useCount   int
+	pos        token.Pos
 }
 
 // funcName returns the match key for a function: plain name, or
@@ -112,7 +113,7 @@ func newVarCollector() *varCollector {
 
 func (c *varCollector) current() map[string]*varDef { return *c.scopes[len(c.scopes)-1] }
 
-func (c *varCollector) define(name string, kind varKind, init ast.Expr, typ ast.Expr) {
+func (c *varCollector) define(name string, kind varKind, init ast.Expr, typ ast.Expr, pos token.Pos) {
 	if name == "" || name == "_" {
 		return
 	}
@@ -132,6 +133,7 @@ func (c *varCollector) define(name string, kind varKind, init ast.Expr, typ ast.
 		initHash:   initHash,
 		initExpr:   init,
 		typeHash:   typeHash,
+		pos:        pos,
 	}
 	c.order++
 	c.all = append(c.all, d)
@@ -190,7 +192,7 @@ func (c *varCollector) walkAssign(t *ast.AssignStmt) {
 				// to avoid false pairing on tuple unpacking.
 				init = nil
 			}
-			c.define(id.Name, kindDefine, init, nil)
+			c.define(id.Name, kindDefine, init, nil, id.Pos())
 		}
 		for _, rhs := range t.Rhs {
 			c.walkExpr(rhs)
@@ -222,7 +224,7 @@ func (c *varCollector) walkDecl(d ast.Decl) {
 			c.walkExpr(vs.Type)
 		}
 		for _, n := range vs.Names {
-			c.define(n.Name, kindVar, singleValue(vs.Values), vs.Type)
+			c.define(n.Name, kindVar, singleValue(vs.Values), vs.Type, n.Pos())
 		}
 	}
 }
@@ -328,7 +330,10 @@ func (c *varCollector) walkFieldList(fl *ast.FieldList, kind varKind) {
 			c.walkExpr(f.Type)
 		}
 		for _, n := range f.Names {
-			c.define(n.Name, kind, nil, f.Type)
+			if n == nil {
+				continue
+			}
+			c.define(n.Name, kind, nil, f.Type, n.Pos())
 		}
 	}
 }
@@ -351,7 +356,7 @@ func (c *varCollector) walkRange(t *ast.RangeStmt) {
 				c.use(id.Name)
 				continue
 			}
-			c.define(id.Name, kindRange, nil, nil)
+			c.define(id.Name, kindRange, nil, nil, id.Pos())
 		}
 	} else {
 		if t.Key != nil {

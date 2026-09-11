@@ -33,6 +33,7 @@ func bar() {
 	for _, r := range got {
 		if e, ok := r.(ExtractFunction); ok &&
 			e.SourceFunction == "foo" && e.NewFunction == "bar" {
+			require.Equal(t, 6, e.Line())
 			found = true
 		}
 	}
@@ -66,6 +67,7 @@ func foo() {
 	for _, r := range got {
 		if e, ok := r.(InlineFunction); ok &&
 			e.TargetFunction == "foo" && e.InlinedFunction == "bar" {
+			require.Equal(t, 4, e.Line())
 			found = true
 		}
 	}

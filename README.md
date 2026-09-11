@@ -25,6 +25,8 @@ Scope rule: when staged changes are present only the staged set is
 observed; otherwise the worktree set is observed. Pass `--commit <rev>`
 to observe a commit versus its parent instead. The observed scope is
 always printed so reports cannot be mistaken for each other.
+Each finding is `file:line: description` using a 1-based line in the
+after source.
 
 Safety: the CLI only reads the repository (status, HEAD, index blobs,
 worktree files, commit trees). It never stages, commits, resets, or
@@ -53,7 +55,7 @@ Only `go-billy` (via `go-git`) is used for filesystems. Tests use
 changes, _ := gitchange.WorktreeChanges(repo)
 findings, _ := refactor.DetectChanges(changes)
 for _, r := range findings {
-    fmt.Println(r.Kind(), r.Path(), r.Describe())
+    fmt.Printf("%s:%d: %s\n", r.Path(), r.Line(), r.Describe())
 }
 ```
 

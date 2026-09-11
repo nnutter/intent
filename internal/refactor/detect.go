@@ -21,11 +21,11 @@ func Detect(path string, before, after []byte) ([]Refactoring, error) {
 	if len(before) == 0 || len(after) == 0 {
 		return nil, nil
 	}
-	beforeFile, err := parseGoFile(path, before)
+	beforeFile, _, err := parseGoFile(path, before)
 	if err != nil {
 		return nil, err
 	}
-	afterFile, err := parseGoFile(path, after)
+	afterFile, afterFset, err := parseGoFile(path, after)
 	if err != nil {
 		return nil, err
 	}
@@ -33,15 +33,29 @@ func Detect(path string, before, after []byte) ([]Refactoring, error) {
 	afterFuncs := collectFuncs(afterFile)
 
 	var out []Refactoring
-	out = append(out, detectRenames(path, beforeFuncs, afterFuncs)...)
-	out = append(out, detectVariableRefactorings(path, beforeFuncs, afterFuncs)...)
-	out = append(out, detectFunctionRefactorings(path, beforeFuncs, afterFuncs)...)
+	out = append(out, detectRenames(path, afterFset, beforeFuncs, afterFuncs)...)
+	out = append(out, detectVariableRefactorings(path, afterFset, beforeFuncs, afterFuncs)...)
+	out = append(out, detectFunctionRefactorings(path, afterFset, beforeFuncs, afterFuncs)...)
 	sortRefactorings(out)
 	return out, nil
 }
 
 //constable:nonmutating
-func parseGoFile(path string, src []byte) (*ast.File, error) {
+func parseGoFile(path string, src []byte) (*ast.File, *token.FileSet, error) {
 	fset := token.NewFileSet()
-	return parser.ParseFile(fset, path, src, parser.SkipObjectResolution)
+	f, err := parser.ParseFile(fset, path, src, parser.SkipObjectResolution)
+	if err != nil {
+		return nil, nil, err
+	}
+	return f, fset, nil
+}
+
+// posLine returns the 1-based physical line of pos in fset, or 0.
+//
+//constable:nonmutating
+func posLine(fset *token.FileSet, pos token.Pos) int {
+	if fset == nil || !pos.IsValid() {
+		return 0
+	}
+	return fset.PositionFor(pos, false).Line
 }

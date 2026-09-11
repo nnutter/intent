@@ -2,6 +2,7 @@ package refactor
 
 import (
 	"go/ast"
+	"go/token"
 	"slices"
 )
 
@@ -15,6 +16,7 @@ import (
 //constable:nonmutating
 func detectRenames(
 	path string,
+	afterFset *token.FileSet,
 	beforeFuncs, afterFuncs map[string]*ast.FuncDecl,
 ) []Refactoring {
 	var out []Refactoring
@@ -23,7 +25,7 @@ func detectRenames(
 		if !ok {
 			continue
 		}
-		out = append(out, detectRenamesInFunc(path, name, beforeFn, afterFn)...)
+		out = append(out, detectRenamesInFunc(path, afterFset, name, beforeFn, afterFn)...)
 	}
 	slices.SortFunc(out, func(a, b Refactoring) int {
 		ra, oka := a.(RenameVariable)
@@ -36,6 +38,9 @@ func detectRenames(
 				return -1
 			}
 			return 1
+		}
+		if ra.AfterLine != rb.AfterLine {
+			return ra.AfterLine - rb.AfterLine
 		}
 		if ra.BeforeName != rb.BeforeName {
 			if ra.BeforeName < rb.BeforeName {
@@ -56,7 +61,9 @@ func detectRenames(
 
 //constable:nonmutating
 func detectRenamesInFunc(
-	path, funcName string,
+	path string,
+	afterFset *token.FileSet,
+	funcName string,
 	beforeFn, afterFn *ast.FuncDecl,
 ) []Refactoring {
 	beforeSingles := singletons(collectVarGroups(beforeFn))
@@ -100,6 +107,7 @@ func detectRenamesInFunc(
 				Function:   funcName,
 				BeforeName: r.name,
 				AfterName:  a.name,
+				AfterLine:  posLine(afterFset, a.pos),
 			})
 			break
 		}

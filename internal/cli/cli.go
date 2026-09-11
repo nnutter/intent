@@ -178,16 +178,25 @@ func writeReport(
 		return err
 	}
 	for _, r := range findings {
-		if _, err := fmt.Fprintf(w, "%s: %s\n", r.Path(), r.Describe()); err != nil {
+		if _, err := fmt.Fprintf(w, "%s\n", formatFinding(r)); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
+//constable:nonmutating
+func formatFinding(r refactor.Refactoring) string {
+	if line := r.Line(); line > 0 {
+		return fmt.Sprintf("%s:%d: %s", r.Path(), line, r.Describe())
+	}
+	return r.Path() + ": " + r.Describe()
+}
+
 type findingJSON struct {
 	Kind        string `json:"kind"`
 	File        string `json:"file"`
+	Line        int    `json:"line,omitzero"`
 	Description string `json:"description"`
 }
 
@@ -210,6 +219,7 @@ func writeJSON(
 		report.Findings = append(report.Findings, findingJSON{
 			Kind:        string(r.Kind()),
 			File:        r.Path(),
+			Line:        r.Line(),
 			Description: r.Describe(),
 		})
 	}

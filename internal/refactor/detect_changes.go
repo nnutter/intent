@@ -13,6 +13,9 @@ func sortRefactorings(out []Refactoring) {
 		if a.Path() != b.Path() {
 			return strings.Compare(a.Path(), b.Path())
 		}
+		if al, bl := a.Line(), b.Line(); al != bl {
+			return al - bl
+		}
 		if a.Kind() != b.Kind() {
 			return strings.Compare(string(a.Kind()), string(b.Kind()))
 		}

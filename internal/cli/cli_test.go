@@ -75,7 +75,7 @@ func TestRunListsWorktreeRename(t *testing.T) {
 	require.NoError(t, err)
 	require.Empty(t, stderr)
 	require.Contains(t, stdout, "scope: worktree")
-	require.Contains(t, stdout, "a.go: rename variable x to y in f")
+	require.Contains(t, stdout, "a.go:2: rename variable x to y in f")
 }
 
 func TestRunPrefersStaged(t *testing.T) {
@@ -91,7 +91,7 @@ func TestRunPrefersStaged(t *testing.T) {
 	stdout, _, err := run(t, repo, Options{})
 	require.NoError(t, err)
 	require.Contains(t, stdout, "scope: staged")
-	require.Contains(t, stdout, "a.go: rename variable x to y in f")
+	require.Contains(t, stdout, "a.go:2: rename variable x to y in f")
 	require.NotContains(t, stdout, "b.go")
 }
 
@@ -142,7 +142,7 @@ func TestRunCommitIgnoresWorktree(t *testing.T) {
 	require.NoError(t, err)
 	require.Empty(t, stderr)
 	require.Contains(t, stdout, "scope: commit "+second.String())
-	require.Contains(t, stdout, "a.go: rename variable x to y in f")
+	require.Contains(t, stdout, "a.go:2: rename variable x to y in f")
 	require.NotContains(t, stdout, "z")
 }
 
@@ -191,6 +191,7 @@ func TestRunCommitJSON(t *testing.T) {
 		Findings []struct {
 			Kind        string `json:"kind"`
 			File        string `json:"file"`
+			Line        int    `json:"line"`
 			Description string `json:"description"`
 		} `json:"findings"`
 	}
@@ -199,6 +200,7 @@ func TestRunCommitJSON(t *testing.T) {
 	require.Equal(t, second.String(), report.Commit)
 	require.Equal(t, 1, report.Files)
 	require.Len(t, report.Findings, 1)
+	require.Equal(t, 2, report.Findings[0].Line)
 	require.Contains(t, report.Findings[0].Description, "x to y")
 }
 
@@ -224,6 +226,7 @@ func TestRunJSON(t *testing.T) {
 		Findings []struct {
 			Kind        string `json:"kind"`
 			File        string `json:"file"`
+			Line        int    `json:"line"`
 			Description string `json:"description"`
 		} `json:"findings"`
 	}
@@ -233,6 +236,7 @@ func TestRunJSON(t *testing.T) {
 	require.Len(t, report.Findings, 1)
 	require.Equal(t, "rename-variable", report.Findings[0].Kind)
 	require.Equal(t, "a.go", report.Findings[0].File)
+	require.Equal(t, 2, report.Findings[0].Line)
 	require.Contains(t, report.Findings[0].Description, "x to y")
 }
 
@@ -247,7 +251,7 @@ func TestRunWarnsOnUnparseableFile(t *testing.T) {
 
 	stdout, stderr, err := run(t, repo, Options{})
 	require.NoError(t, err)
-	require.Contains(t, stdout, "good.go: rename variable x to y in f")
+	require.Contains(t, stdout, "good.go:2: rename variable x to y in f")
 	require.Contains(t, stderr, "warning")
 }
 

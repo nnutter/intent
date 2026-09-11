@@ -26,6 +26,7 @@ func f(a, b int) {
 	found := false
 	for _, r := range got {
 		if e, ok := r.(ExtractVariable); ok && e.VarName == "sum" && e.Function == "f" {
+			require.Equal(t, 4, e.Line())
 			found = true
 		}
 	}
@@ -52,6 +53,7 @@ func f(a, b int) {
 	found := false
 	for _, r := range got {
 		if e, ok := r.(InlineVariable); ok && e.VarName == "sum" {
+			require.Equal(t, 4, e.Line())
 			found = true
 		}
 	}
