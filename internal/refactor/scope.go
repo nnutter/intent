@@ -441,16 +441,22 @@ func (c *varCollector) walkStmt(s ast.Stmt) {
 		for _, e := range t.List {
 			c.walkExpr(e)
 		}
+		// Each case is an implicit block, so names in one clause do
+		// not merge with the same spelling in another clause.
+		c.push()
 		for _, st := range t.Body {
 			c.walkStmt(st)
 		}
+		c.pop()
 	case *ast.CommClause:
+		c.push()
 		if t.Comm != nil {
 			c.walkStmt(t.Comm)
 		}
 		for _, st := range t.Body {
 			c.walkStmt(st)
 		}
+		c.pop()
 	default:
 		// Fall back to inspecting children for uses (e.g. future nodes).
 		ast.Inspect(s, func(n ast.Node) bool {
