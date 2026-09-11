@@ -218,6 +218,20 @@ func writeJSON(
 	return enc.Encode(report)
 }
 
+// openRepository opens a git repository at path. Linked worktrees need
+// commondir so objects and refs resolve from the shared git dir; parent
+// directories are walked so --repo . still works from a subdirectory.
+func openRepository(path string) (*git.Repository, error) {
+	repo, err := git.PlainOpenWithOptions(path, &git.PlainOpenOptions{
+		DetectDotGit:          true,
+		EnableDotGitCommonDir: true,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("open repository at %q: %w", path, err)
+	}
+	return repo, nil
+}
+
 // NewRootCmd builds the intent command. It only reads the repository.
 // version is the binary version reported by --version.
 func NewRootCmd(version string) *cobra.Command {
@@ -241,9 +255,9 @@ files, so a failed run leaves the repo untouched.`,
 		SilenceUsage:  true,
 		SilenceErrors: true,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			repo, err := git.PlainOpen(repoPath)
+			repo, err := openRepository(repoPath)
 			if err != nil {
-				return fmt.Errorf("open repository at %q: %w", repoPath, err)
+				return err
 			}
 			return Run(cmd.Context(), repo,
 				Options{Scope: scopeOpt, Format: formatOpt, Commit: commitOpt},

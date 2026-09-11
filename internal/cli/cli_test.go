@@ -5,6 +5,9 @@ import (
 	"context"
 	"encoding/json"
 	"os"
+	"os/exec"
+	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -307,6 +310,83 @@ func TestExecuteOnDiskRepoObservesCommit(t *testing.T) {
 	require.Contains(t, stdout.String(), "scope: commit "+head.String())
 	require.Contains(t, stdout.String(), "rename variable x to y")
 	require.NotContains(t, stdout.String(), "z")
+}
+
+func TestExecuteLinkedWorktreeResolvesHEAD(t *testing.T) {
+	t.Parallel()
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not installed")
+	}
+
+	root := t.TempDir()
+	mainDir := filepath.Join(root, "main")
+	linkDir := filepath.Join(root, "linked")
+	require.NoError(t, os.Mkdir(mainDir, 0o755))
+
+	runGit(t, mainDir, "init", "-b", "main")
+	require.NoError(t, os.WriteFile(filepath.Join(mainDir, "a.go"),
+		[]byte("package p\nfunc f() { x := 1; _ = x }\n"), 0o644))
+	runGit(t, mainDir, "add", "a.go")
+	runGit(t, mainDir, "commit", "-m", "first")
+	require.NoError(t, os.WriteFile(filepath.Join(mainDir, "a.go"),
+		[]byte("package p\nfunc f() { y := 1; _ = y }\n"), 0o644))
+	runGit(t, mainDir, "add", "a.go")
+	runGit(t, mainDir, "commit", "-m", "second")
+	runGit(t, mainDir, "worktree", "add", "-b", "linked", linkDir)
+
+	var stdout, stderr bytes.Buffer
+	require.NoError(t, Execute(context.Background(),
+		[]string{"--repo", linkDir, "--commit", "HEAD"}, &stdout, &stderr, "dev"))
+	require.Empty(t, stderr.String())
+	require.Contains(t, stdout.String(), "scope: commit")
+	require.Contains(t, stdout.String(), "rename variable x to y")
+
+	stdout.Reset()
+	stderr.Reset()
+	require.NoError(t, Execute(context.Background(),
+		[]string{"--repo", linkDir}, &stdout, &stderr, "dev"))
+	require.Empty(t, stderr.String())
+	require.Contains(t, stdout.String(), "no refactorings found in worktree changes")
+}
+
+func TestExecuteDetectsDotGitFromSubdir(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	repo, err := git.PlainInit(dir, false)
+	require.NoError(t, err)
+	wt, err := repo.Worktree()
+	require.NoError(t, err)
+	require.NoError(t, os.Mkdir(filepath.Join(dir, "sub"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "a.go"),
+		[]byte("package p\nfunc f() { x := 1; _ = x }\n"), 0o644))
+	_, err = wt.Add("a.go")
+	require.NoError(t, err)
+	_, err = wt.Commit("first", &git.CommitOptions{
+		Author: &object.Signature{Name: "t", Email: "t@example.com", When: time.Now()},
+	})
+	require.NoError(t, err)
+
+	var stdout, stderr bytes.Buffer
+	require.NoError(t, Execute(context.Background(),
+		[]string{"--repo", filepath.Join(dir, "sub")}, &stdout, &stderr, "dev"))
+	require.Empty(t, stderr.String())
+	require.Contains(t, stdout.String(), "no refactorings found")
+}
+
+func runGit(t *testing.T, dir string, args ...string) {
+	t.Helper()
+	cmd := exec.Command("git", args...)
+	cmd.Dir = dir
+	cmd.Env = append(os.Environ(),
+		"GIT_AUTHOR_NAME=t",
+		"GIT_AUTHOR_EMAIL=t@example.com",
+		"GIT_COMMITTER_NAME=t",
+		"GIT_COMMITTER_EMAIL=t@example.com",
+		"GIT_CONFIG_GLOBAL=/dev/null",
+		"GIT_CONFIG_SYSTEM=/dev/null",
+	)
+	out, err := cmd.CombinedOutput()
+	require.NoError(t, err, "git %s: %s", strings.Join(args, " "), out)
 }
 
 func TestRootCmdVersion(t *testing.T) {

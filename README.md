@@ -29,7 +29,9 @@ always printed so reports cannot be mistaken for each other.
 Safety: the CLI only reads the repository (status, HEAD, index blobs,
 worktree files, commit trees). It never stages, commits, resets, or
 edits anything, so a failed run leaves the repo untouched. Repositories
-with conflict markers are refused instead of half-reported.
+with conflict markers are refused instead of half-reported. Linked
+worktrees are opened with git `commondir` support so HEAD and objects
+resolve from the shared repository.
 
 ## Layout
 
