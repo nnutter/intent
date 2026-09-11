@@ -6,6 +6,8 @@ package gitchange
 
 import (
 	"bytes"
+	"errors"
+	"fmt"
 	"io"
 	"os"
 	"slices"
@@ -105,7 +107,7 @@ func worktreeChangesFrom(
 func loadHead(repo *git.Repository) (*object.Commit, error) {
 	ref, err := repo.Head()
 	if err != nil {
-		if err == plumbing.ErrReferenceNotFound {
+		if errors.Is(err, plumbing.ErrReferenceNotFound) {
 			return nil, nil
 		}
 		return nil, err
@@ -129,7 +131,7 @@ func readWorktreeFile(wt *git.Worktree, path string) ([]byte, error) {
 func readHeadFile(commit *object.Commit, path string) ([]byte, error) {
 	f, err := commit.File(path)
 	if err != nil {
-		if err == object.ErrFileNotFound {
+		if errors.Is(err, object.ErrFileNotFound) {
 			return nil, nil
 		}
 		return nil, err
@@ -139,6 +141,27 @@ func readHeadFile(commit *object.Commit, path string) ([]byte, error) {
 		return nil, err
 	}
 	return []byte(content), nil
+}
+
+// ResolveCommit turns a git revision (hash, HEAD, tag, HEAD~1, …) into a
+// commit hash. It does not observe staged or worktree changes.
+//
+//constable:nonmutating
+func ResolveCommit(repo *git.Repository, rev string) (plumbing.Hash, error) {
+	if repo == nil {
+		return plumbing.ZeroHash, fmt.Errorf("nil repository")
+	}
+	if rev == "" {
+		return plumbing.ZeroHash, fmt.Errorf("empty revision")
+	}
+	h, err := repo.ResolveRevision(plumbing.Revision(rev))
+	if err != nil {
+		return plumbing.ZeroHash, fmt.Errorf("resolve revision %q: %w", rev, err)
+	}
+	if h == nil || h.IsZero() {
+		return plumbing.ZeroHash, fmt.Errorf("resolve revision %q: empty hash", rev)
+	}
+	return *h, nil
 }
 
 // CommitChanges returns Go file changes in one commit versus its first
@@ -195,7 +218,7 @@ func firstParent(commit *object.Commit) (*object.Commit, error) {
 	defer iter.Close()
 	parent, err := iter.Next()
 	if err != nil {
-		if err == io.EOF {
+		if errors.Is(err, io.EOF) {
 			return nil, nil
 		}
 		return nil, err
@@ -215,7 +238,7 @@ func rootCommitChanges(commit *object.Commit) ([]refactor.FileChange, error) {
 	for {
 		f, err := iter.Next()
 		if err != nil {
-			if err == io.EOF {
+			if errors.Is(err, io.EOF) {
 				break
 			}
 			return nil, err

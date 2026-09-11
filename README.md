@@ -15,18 +15,25 @@ MVP detects five local refactorings with `go-git` (no `git` CLI):
 go run .                      # auto scope, text output
 go run . --scope staged      # HEAD versus the index only
 go run . --scope worktree    # HEAD versus the worktree even if staged
-ngo run . --format json       # machine-readable report
+go run . --commit HEAD       # that commit versus its first parent
+go run . --commit abc123
+go run . --format json       # machine-readable report
 go run . --repo /path/to/repo
 ```
 
 Scope rule: when staged changes are present only the staged set is
-observed; otherwise the worktree set is observed. The observed scope
-is always printed so reports cannot be mistaken for each other.
+observed; otherwise the worktree set is observed. Pass `--commit <rev>`
+to observe a commit versus its parent instead. The observed scope is
+always printed so reports cannot be mistaken for each other.
+Each finding is `file:line: description` using a 1-based line in the
+after source.
 
 Safety: the CLI only reads the repository (status, HEAD, index blobs,
-worktree files). It never stages, commits, resets, or edits anything,
-so a failed run leaves the repo untouched. Repositories with conflict
-markers are refused instead of half-reported.
+worktree files, commit trees). It never stages, commits, resets, or
+edits anything, so a failed run leaves the repo untouched. Repositories
+with conflict markers are refused instead of half-reported. Linked
+worktrees are opened with git `commondir` support so HEAD and objects
+resolve from the shared repository.
 
 ## Layout
 
@@ -48,7 +55,7 @@ Only `go-billy` (via `go-git`) is used for filesystems. Tests use
 changes, _ := gitchange.WorktreeChanges(repo)
 findings, _ := refactor.DetectChanges(changes)
 for _, r := range findings {
-    fmt.Println(r.Kind(), r.Path(), r.Describe())
+    fmt.Printf("%s:%d: %s\n", r.Path(), r.Line(), r.Describe())
 }
 ```
 

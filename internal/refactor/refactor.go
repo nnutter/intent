@@ -27,6 +27,8 @@ type Refactoring interface {
 	Kind() Kind
 	// Path returns the file path the refactoring was found in.
 	Path() string
+	// Line returns a 1-based line in the after source, or 0 if unknown.
+	Line() int
 	// Describe returns a short human-readable description.
 	Describe() string
 
@@ -47,6 +49,8 @@ type RenameVariable struct {
 	Function   string
 	BeforeName string
 	AfterName  string
+	// AfterLine is the 1-based line of the renamed name in the after source.
+	AfterLine int
 }
 
 // Describe returns a human-readable description.
@@ -60,6 +64,9 @@ func (r RenameVariable) Kind() Kind { return KindRenameVariable }
 // Path returns the file path.
 func (r RenameVariable) Path() string { return r.File }
 
+// Line returns the after-source line of the renamed name.
+func (r RenameVariable) Line() int { return r.AfterLine }
+
 func (RenameVariable) sealedRefactoring() {}
 
 // ExtractVariable records an expression extracted into a new variable.
@@ -67,6 +74,8 @@ type ExtractVariable struct {
 	File     string
 	Function string
 	VarName  string
+	// AfterLine is the 1-based line of the new variable in the after source.
+	AfterLine int
 }
 
 // Describe returns a human-readable description.
@@ -80,6 +89,9 @@ func (r ExtractVariable) Kind() Kind { return KindExtractVariable }
 // Path returns the file path.
 func (r ExtractVariable) Path() string { return r.File }
 
+// Line returns the after-source line of the new variable.
+func (r ExtractVariable) Line() int { return r.AfterLine }
+
 func (ExtractVariable) sealedRefactoring() {}
 
 // InlineVariable records a variable inlined back into its use sites.
@@ -87,6 +99,9 @@ type InlineVariable struct {
 	File     string
 	Function string
 	VarName  string
+	// AfterLine is the 1-based line of a remaining use of the inlined
+	// expression in the after source.
+	AfterLine int
 }
 
 // Describe returns a human-readable description.
@@ -100,6 +115,9 @@ func (r InlineVariable) Kind() Kind { return KindInlineVariable }
 // Path returns the file path.
 func (r InlineVariable) Path() string { return r.File }
 
+// Line returns the after-source line of an inlined use.
+func (r InlineVariable) Line() int { return r.AfterLine }
+
 func (InlineVariable) sealedRefactoring() {}
 
 // ExtractFunction records statements extracted into a new function.
@@ -107,6 +125,8 @@ type ExtractFunction struct {
 	File           string
 	SourceFunction string
 	NewFunction    string
+	// AfterLine is the 1-based line of the new function in the after source.
+	AfterLine int
 }
 
 // Describe returns a human-readable description.
@@ -120,6 +140,9 @@ func (r ExtractFunction) Kind() Kind { return KindExtractFunction }
 // Path returns the file path.
 func (r ExtractFunction) Path() string { return r.File }
 
+// Line returns the after-source line of the new function.
+func (r ExtractFunction) Line() int { return r.AfterLine }
+
 func (ExtractFunction) sealedRefactoring() {}
 
 // InlineFunction records a function inlined back into its caller.
@@ -127,6 +150,8 @@ type InlineFunction struct {
 	File            string
 	TargetFunction  string
 	InlinedFunction string
+	// AfterLine is the 1-based line of the inlined statement run in the after source.
+	AfterLine int
 }
 
 // Describe returns a human-readable description.
@@ -139,5 +164,8 @@ func (r InlineFunction) Kind() Kind { return KindInlineFunction }
 
 // Path returns the file path.
 func (r InlineFunction) Path() string { return r.File }
+
+// Line returns the after-source line of the inlined statements.
+func (r InlineFunction) Line() int { return r.AfterLine }
 
 func (InlineFunction) sealedRefactoring() {}

@@ -113,3 +113,29 @@ func TestCommitChangesRoot(t *testing.T) {
 	require.Nil(t, changes[0].Before)
 	require.NotNil(t, changes[0].After)
 }
+
+func TestResolveCommit(t *testing.T) {
+	t.Parallel()
+	repo := initMemRepo(t)
+	writeFile(t, repo, "a.go", "package p\nfunc f() {}\n")
+	first := commitAll(t, repo, "first")
+
+	h, err := ResolveCommit(repo, "HEAD")
+	require.NoError(t, err)
+	require.Equal(t, first.Hash, h)
+
+	h, err = ResolveCommit(repo, first.Hash.String())
+	require.NoError(t, err)
+	require.Equal(t, first.Hash, h)
+
+	h, err = ResolveCommit(repo, first.Hash.String()[:12])
+	require.NoError(t, err)
+	require.Equal(t, first.Hash, h)
+
+	_, err = ResolveCommit(repo, "")
+	require.Error(t, err)
+	_, err = ResolveCommit(nil, "HEAD")
+	require.Error(t, err)
+	_, err = ResolveCommit(repo, "missing")
+	require.Error(t, err)
+}

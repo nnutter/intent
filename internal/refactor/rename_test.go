@@ -31,6 +31,7 @@ func greet() {
 	require.Equal(t, "greet", r.Function)
 	require.Equal(t, "name", r.BeforeName)
 	require.Equal(t, "user", r.AfterName)
+	require.Equal(t, 4, r.Line())
 }
 
 func TestDetectRenameParam(t *testing.T) {
@@ -44,6 +45,7 @@ func TestDetectRenameParam(t *testing.T) {
 	require.True(t, ok)
 	require.Equal(t, "foo", r.BeforeName)
 	require.Equal(t, "bar", r.AfterName)
+	require.Equal(t, 2, r.Line())
 }
 
 func TestDetectNoRenameWhenIdentical(t *testing.T) {

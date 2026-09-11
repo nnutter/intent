@@ -3,6 +3,7 @@ package refactor
 import (
 	"go/ast"
 	"go/token"
+	"slices"
 )
 
 // varKind classifies how a variable was defined.
@@ -25,6 +26,10 @@ type varDef struct {
 	initExpr   ast.Expr
 	typeHash   uint64
 	useCount   int
+	pos        token.Pos
+	// scalar is true when this name is the only LHS of a single-value
+	// define or var spec. Tuple unpacking is not extract/inline.
+	scalar bool
 }
 
 // funcName returns the match key for a function: plain name, or
@@ -111,7 +116,7 @@ func newVarCollector() *varCollector {
 
 func (c *varCollector) current() map[string]*varDef { return *c.scopes[len(c.scopes)-1] }
 
-func (c *varCollector) define(name string, kind varKind, init ast.Expr, typ ast.Expr) {
+func (c *varCollector) define(name string, kind varKind, init ast.Expr, typ ast.Expr, pos token.Pos, scalar bool) {
 	if name == "" || name == "_" {
 		return
 	}
@@ -131,6 +136,8 @@ func (c *varCollector) define(name string, kind varKind, init ast.Expr, typ ast.
 		initHash:   initHash,
 		initExpr:   init,
 		typeHash:   typeHash,
+		pos:        pos,
+		scalar:     scalar,
 	}
 	c.order++
 	c.all = append(c.all, d)
@@ -154,8 +161,8 @@ func (c *varCollector) use(name string) {
 	if name == "" || name == "_" {
 		return
 	}
-	for i := len(c.scopes) - 1; i >= 0; i-- {
-		if d, ok := (*c.scopes[i])[name]; ok {
+	for _, v := range slices.Backward(c.scopes) {
+		if d, ok := (*v)[name]; ok {
 			d.useCount++
 			return
 		}
@@ -167,6 +174,11 @@ func (c *varCollector) walkAssign(t *ast.AssignStmt) {
 		// Define new names in the current scope; existing names in the
 		// same scope are assignments (uses).
 		cur := c.current()
+		var init ast.Expr
+		if len(t.Rhs) == 1 {
+			init = t.Rhs[0]
+		}
+		scalar := len(t.Lhs) == 1 && len(t.Rhs) == 1
 		for _, lhs := range t.Lhs {
 			id, ok := lhs.(*ast.Ident)
 			if !ok {
@@ -180,16 +192,7 @@ func (c *varCollector) walkAssign(t *ast.AssignStmt) {
 				c.use(id.Name)
 				continue
 			}
-			var init ast.Expr
-			if len(t.Rhs) == 1 {
-				init = t.Rhs[0]
-			} else if len(t.Rhs) > 1 {
-				// Multiple RHS: use the whole tuple shape via first match.
-				// Store nil and rely on type/use matching; init stays nil
-				// to avoid false pairing on tuple unpacking.
-				init = nil
-			}
-			c.define(id.Name, kindDefine, init, nil)
+			c.define(id.Name, kindDefine, init, nil, id.Pos(), scalar)
 		}
 		for _, rhs := range t.Rhs {
 			c.walkExpr(rhs)
@@ -220,8 +223,10 @@ func (c *varCollector) walkDecl(d ast.Decl) {
 		if vs.Type != nil {
 			c.walkExpr(vs.Type)
 		}
+		init := singleValue(vs.Values)
+		scalar := len(vs.Names) == 1 && len(vs.Values) == 1
 		for _, n := range vs.Names {
-			c.define(n.Name, kindVar, singleValue(vs.Values), vs.Type)
+			c.define(n.Name, kindVar, init, vs.Type, n.Pos(), scalar)
 		}
 	}
 }
@@ -327,7 +332,10 @@ func (c *varCollector) walkFieldList(fl *ast.FieldList, kind varKind) {
 			c.walkExpr(f.Type)
 		}
 		for _, n := range f.Names {
-			c.define(n.Name, kind, nil, f.Type)
+			if n == nil {
+				continue
+			}
+			c.define(n.Name, kind, nil, f.Type, n.Pos(), false)
 		}
 	}
 }
@@ -350,7 +358,7 @@ func (c *varCollector) walkRange(t *ast.RangeStmt) {
 				c.use(id.Name)
 				continue
 			}
-			c.define(id.Name, kindRange, nil, nil)
+			c.define(id.Name, kindRange, nil, nil, id.Pos(), false)
 		}
 	} else {
 		if t.Key != nil {
@@ -435,16 +443,22 @@ func (c *varCollector) walkStmt(s ast.Stmt) {
 		for _, e := range t.List {
 			c.walkExpr(e)
 		}
+		// Each case is an implicit block, so names in one clause do
+		// not merge with the same spelling in another clause.
+		c.push()
 		for _, st := range t.Body {
 			c.walkStmt(st)
 		}
+		c.pop()
 	case *ast.CommClause:
+		c.push()
 		if t.Comm != nil {
 			c.walkStmt(t.Comm)
 		}
 		for _, st := range t.Body {
 			c.walkStmt(st)
 		}
+		c.pop()
 	default:
 		// Fall back to inspecting children for uses (e.g. future nodes).
 		ast.Inspect(s, func(n ast.Node) bool {

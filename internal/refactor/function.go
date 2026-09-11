@@ -2,6 +2,7 @@ package refactor
 
 import (
 	"go/ast"
+	"go/token"
 )
 
 // containsCall reports whether a function body calls simpleName, either as
@@ -43,15 +44,24 @@ func containsCall(fn *ast.FuncDecl, simpleName string) bool {
 //
 //constable:nonmutating
 func containsBlock(body []ast.Stmt, targetHash uint64, targetLen int) bool {
+	return findStmtRun(body, targetHash, targetLen) != nil
+}
+
+// findStmtRun returns the first contiguous statement run hashing to
+// targetHash, or nil if none match.
+//
+//constable:nonmutating
+func findStmtRun(body []ast.Stmt, targetHash uint64, targetLen int) []ast.Stmt {
 	if targetLen < 1 || len(body) < targetLen {
-		return false
+		return nil
 	}
 	for i := 0; i+targetLen <= len(body); i++ {
-		if hashStmtListOf(body[i:i+targetLen], nil) == targetHash {
-			return true
+		run := body[i : i+targetLen]
+		if hashStmtListOf(run, nil) == targetHash {
+			return run
 		}
 	}
-	return false
+	return nil
 }
 
 // detectFunctionRefactorings finds extract-function and inline-function
@@ -60,17 +70,19 @@ func containsBlock(body []ast.Stmt, targetHash uint64, targetLen int) bool {
 //constable:nonmutating
 func detectFunctionRefactorings(
 	path string,
+	afterFset *token.FileSet,
 	beforeFuncs, afterFuncs map[string]*ast.FuncDecl,
 ) []Refactoring {
 	var out []Refactoring
-	out = append(out, detectExtractFunction(path, beforeFuncs, afterFuncs)...)
-	out = append(out, detectInlineFunction(path, beforeFuncs, afterFuncs)...)
+	out = append(out, detectExtractFunction(path, afterFset, beforeFuncs, afterFuncs)...)
+	out = append(out, detectInlineFunction(path, afterFset, beforeFuncs, afterFuncs)...)
 	return out
 }
 
 //constable:nonmutating
 func detectExtractFunction(
 	path string,
+	afterFset *token.FileSet,
 	beforeFuncs, afterFuncs map[string]*ast.FuncDecl,
 ) []Refactoring {
 	var newNames []string
@@ -88,7 +100,7 @@ func detectExtractFunction(
 	var out []Refactoring
 	for _, newQualified := range newNames {
 		newFn := afterFuncs[newQualified]
-		if newFn == nil || newFn.Body == nil || len(newFn.Body.List) == 0 {
+		if newFn == nil || newFn.Name == nil || newFn.Body == nil || len(newFn.Body.List) == 0 {
 			continue
 		}
 		newBody := newFn.Body.List
@@ -117,6 +129,7 @@ func detectExtractFunction(
 				File:           path,
 				SourceFunction: src,
 				NewFunction:    newQualified,
+				AfterLine:      posLine(afterFset, newFn.Name.Pos()),
 			})
 		}
 	}
@@ -126,6 +139,7 @@ func detectExtractFunction(
 //constable:nonmutating
 func detectInlineFunction(
 	path string,
+	afterFset *token.FileSet,
 	beforeFuncs, afterFuncs map[string]*ast.FuncDecl,
 ) []Refactoring {
 	var deleted []string
@@ -162,16 +176,22 @@ func detectInlineFunction(
 			if containsCall(afterT, delSimple) {
 				continue
 			}
-			if !containsBlock(afterT.Body.List, delHash, len(delBody)) {
+			run := findStmtRun(afterT.Body.List, delHash, len(delBody))
+			if run == nil {
 				continue
 			}
 			if containsBlock(beforeT.Body.List, delHash, len(delBody)) {
 				continue
 			}
+			line := 0
+			if len(run) > 0 && run[0] != nil {
+				line = posLine(afterFset, run[0].Pos())
+			}
 			out = append(out, InlineFunction{
 				File:            path,
 				TargetFunction:  target,
 				InlinedFunction: delQualified,
+				AfterLine:       line,
 			})
 		}
 	}

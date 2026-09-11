@@ -25,6 +25,8 @@ const (
 	ScopeStaged Scope = "staged"
 	// ScopeWorktree is HEAD versus the worktree.
 	ScopeWorktree Scope = "worktree"
+	// ScopeCommit is one commit versus its first parent.
+	ScopeCommit Scope = "commit"
 )
 
 // HasStagedChanges reports whether any path has a staged entry.
