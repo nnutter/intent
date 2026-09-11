@@ -8,6 +8,7 @@
 package cli
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -44,18 +45,12 @@ type Options struct {
 
 //constable:nonmutating
 func (o Options) format() string {
-	if o.Format == "" {
-		return FormatText
-	}
-	return o.Format
+	return cmp.Or(o.Format, FormatText)
 }
 
 //constable:nonmutating
 func (o Options) scope() string {
-	if o.Scope == "" {
-		return ScopeAuto
-	}
-	return o.Scope
+	return cmp.Or(o.Scope, ScopeAuto)
 }
 
 // Run observes changes, detects refactorings, and writes the report.

@@ -6,6 +6,7 @@ package gitchange
 
 import (
 	"bytes"
+	"errors"
 	"io"
 	"os"
 	"slices"
@@ -105,7 +106,7 @@ func worktreeChangesFrom(
 func loadHead(repo *git.Repository) (*object.Commit, error) {
 	ref, err := repo.Head()
 	if err != nil {
-		if err == plumbing.ErrReferenceNotFound {
+		if errors.Is(err, plumbing.ErrReferenceNotFound) {
 			return nil, nil
 		}
 		return nil, err
@@ -129,7 +130,7 @@ func readWorktreeFile(wt *git.Worktree, path string) ([]byte, error) {
 func readHeadFile(commit *object.Commit, path string) ([]byte, error) {
 	f, err := commit.File(path)
 	if err != nil {
-		if err == object.ErrFileNotFound {
+		if errors.Is(err, object.ErrFileNotFound) {
 			return nil, nil
 		}
 		return nil, err
@@ -195,7 +196,7 @@ func firstParent(commit *object.Commit) (*object.Commit, error) {
 	defer iter.Close()
 	parent, err := iter.Next()
 	if err != nil {
-		if err == io.EOF {
+		if errors.Is(err, io.EOF) {
 			return nil, nil
 		}
 		return nil, err
@@ -215,7 +216,7 @@ func rootCommitChanges(commit *object.Commit) ([]refactor.FileChange, error) {
 	for {
 		f, err := iter.Next()
 		if err != nil {
-			if err == io.EOF {
+			if errors.Is(err, io.EOF) {
 				break
 			}
 			return nil, err

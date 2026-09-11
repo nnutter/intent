@@ -71,10 +71,7 @@ func detectVariableInFunc(
 			continue
 		}
 		afterCount := afterCounts[a.initHash]
-		afterExcludingDef := afterCount - 1
-		if afterExcludingDef < 0 {
-			afterExcludingDef = 0
-		}
+		afterExcludingDef := max(afterCount-1, 0)
 		replaced := beforeCount - afterExcludingDef
 		if replaced < 1 {
 			continue

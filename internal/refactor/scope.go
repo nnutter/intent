@@ -3,6 +3,7 @@ package refactor
 import (
 	"go/ast"
 	"go/token"
+	"slices"
 )
 
 // varKind classifies how a variable was defined.
@@ -154,8 +155,8 @@ func (c *varCollector) use(name string) {
 	if name == "" || name == "_" {
 		return
 	}
-	for i := len(c.scopes) - 1; i >= 0; i-- {
-		if d, ok := (*c.scopes[i])[name]; ok {
+	for _, v := range slices.Backward(c.scopes) {
+		if d, ok := (*v)[name]; ok {
 			d.useCount++
 			return
 		}
