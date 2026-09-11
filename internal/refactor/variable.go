@@ -64,7 +64,7 @@ func detectVariableInFunc(
 		if _, ok := beforeSingles[name]; ok {
 			continue
 		}
-		if a.initExpr == nil || isTrivialExpr(a.initExpr) {
+		if !a.scalar || a.initExpr == nil || isTrivialExpr(a.initExpr) {
 			continue
 		}
 		if a.useCount < 1 {
@@ -94,7 +94,7 @@ func detectVariableInFunc(
 		if _, ok := afterSingles[name]; ok {
 			continue
 		}
-		if b.initExpr == nil || isTrivialExpr(b.initExpr) {
+		if !b.scalar || b.initExpr == nil || isTrivialExpr(b.initExpr) {
 			continue
 		}
 		if b.useCount < 1 {

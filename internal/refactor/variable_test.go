@@ -84,6 +84,35 @@ func TestDetectNoExtractForTrivialLiteral(t *testing.T) {
 	}
 }
 
+func TestDetectNoExtractForNamedDiscardedResult(t *testing.T) {
+	t.Parallel()
+	before := []byte(`package p
+func g() (int, error) { return 1, nil }
+func commit() {
+	_, err := g()
+	if err != nil {
+		return
+	}
+}
+`)
+	after := []byte(`package p
+func g() (int, error) { return 1, nil }
+func commit() int {
+	h, err := g()
+	if err != nil {
+		return 0
+	}
+	return h
+}
+`)
+	got, err := Detect("a.go", before, after)
+	require.NoError(t, err)
+	for _, r := range got {
+		_, isExtract := r.(ExtractVariable)
+		require.False(t, isExtract, "naming a discarded result is not extract: %v", r)
+	}
+}
+
 func TestDetectNoInlineForSameNameInSwitchCases(t *testing.T) {
 	t.Parallel()
 	before := []byte(`package p

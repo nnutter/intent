@@ -27,6 +27,9 @@ type varDef struct {
 	typeHash   uint64
 	useCount   int
 	pos        token.Pos
+	// scalar is true when this name is the only LHS of a single-value
+	// define or var spec. Tuple unpacking is not extract/inline.
+	scalar bool
 }
 
 // funcName returns the match key for a function: plain name, or
@@ -113,7 +116,7 @@ func newVarCollector() *varCollector {
 
 func (c *varCollector) current() map[string]*varDef { return *c.scopes[len(c.scopes)-1] }
 
-func (c *varCollector) define(name string, kind varKind, init ast.Expr, typ ast.Expr, pos token.Pos) {
+func (c *varCollector) define(name string, kind varKind, init ast.Expr, typ ast.Expr, pos token.Pos, scalar bool) {
 	if name == "" || name == "_" {
 		return
 	}
@@ -134,6 +137,7 @@ func (c *varCollector) define(name string, kind varKind, init ast.Expr, typ ast.
 		initExpr:   init,
 		typeHash:   typeHash,
 		pos:        pos,
+		scalar:     scalar,
 	}
 	c.order++
 	c.all = append(c.all, d)
@@ -170,6 +174,11 @@ func (c *varCollector) walkAssign(t *ast.AssignStmt) {
 		// Define new names in the current scope; existing names in the
 		// same scope are assignments (uses).
 		cur := c.current()
+		var init ast.Expr
+		if len(t.Rhs) == 1 {
+			init = t.Rhs[0]
+		}
+		scalar := len(t.Lhs) == 1 && len(t.Rhs) == 1
 		for _, lhs := range t.Lhs {
 			id, ok := lhs.(*ast.Ident)
 			if !ok {
@@ -183,16 +192,7 @@ func (c *varCollector) walkAssign(t *ast.AssignStmt) {
 				c.use(id.Name)
 				continue
 			}
-			var init ast.Expr
-			if len(t.Rhs) == 1 {
-				init = t.Rhs[0]
-			} else if len(t.Rhs) > 1 {
-				// Multiple RHS: use the whole tuple shape via first match.
-				// Store nil and rely on type/use matching; init stays nil
-				// to avoid false pairing on tuple unpacking.
-				init = nil
-			}
-			c.define(id.Name, kindDefine, init, nil, id.Pos())
+			c.define(id.Name, kindDefine, init, nil, id.Pos(), scalar)
 		}
 		for _, rhs := range t.Rhs {
 			c.walkExpr(rhs)
@@ -223,8 +223,10 @@ func (c *varCollector) walkDecl(d ast.Decl) {
 		if vs.Type != nil {
 			c.walkExpr(vs.Type)
 		}
+		init := singleValue(vs.Values)
+		scalar := len(vs.Names) == 1 && len(vs.Values) == 1
 		for _, n := range vs.Names {
-			c.define(n.Name, kindVar, singleValue(vs.Values), vs.Type, n.Pos())
+			c.define(n.Name, kindVar, init, vs.Type, n.Pos(), scalar)
 		}
 	}
 }
@@ -333,7 +335,7 @@ func (c *varCollector) walkFieldList(fl *ast.FieldList, kind varKind) {
 			if n == nil {
 				continue
 			}
-			c.define(n.Name, kind, nil, f.Type, n.Pos())
+			c.define(n.Name, kind, nil, f.Type, n.Pos(), false)
 		}
 	}
 }
@@ -356,7 +358,7 @@ func (c *varCollector) walkRange(t *ast.RangeStmt) {
 				c.use(id.Name)
 				continue
 			}
-			c.define(id.Name, kindRange, nil, nil, id.Pos())
+			c.define(id.Name, kindRange, nil, nil, id.Pos(), false)
 		}
 	} else {
 		if t.Key != nil {
