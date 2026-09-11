@@ -15,18 +15,21 @@ MVP detects five local refactorings with `go-git` (no `git` CLI):
 go run .                      # auto scope, text output
 go run . --scope staged      # HEAD versus the index only
 go run . --scope worktree    # HEAD versus the worktree even if staged
-ngo run . --format json       # machine-readable report
+go run . --commit HEAD       # that commit versus its first parent
+go run . --commit abc123
+go run . --format json       # machine-readable report
 go run . --repo /path/to/repo
 ```
 
 Scope rule: when staged changes are present only the staged set is
-observed; otherwise the worktree set is observed. The observed scope
-is always printed so reports cannot be mistaken for each other.
+observed; otherwise the worktree set is observed. Pass `--commit <rev>`
+to observe a commit versus its parent instead. The observed scope is
+always printed so reports cannot be mistaken for each other.
 
 Safety: the CLI only reads the repository (status, HEAD, index blobs,
-worktree files). It never stages, commits, resets, or edits anything,
-so a failed run leaves the repo untouched. Repositories with conflict
-markers are refused instead of half-reported.
+worktree files, commit trees). It never stages, commits, resets, or
+edits anything, so a failed run leaves the repo untouched. Repositories
+with conflict markers are refused instead of half-reported.
 
 ## Layout
 

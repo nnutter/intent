@@ -7,6 +7,7 @@ package gitchange
 import (
 	"bytes"
 	"errors"
+	"fmt"
 	"io"
 	"os"
 	"slices"
@@ -140,6 +141,27 @@ func readHeadFile(commit *object.Commit, path string) ([]byte, error) {
 		return nil, err
 	}
 	return []byte(content), nil
+}
+
+// ResolveCommit turns a git revision (hash, HEAD, tag, HEAD~1, …) into a
+// commit hash. It does not observe staged or worktree changes.
+//
+//constable:nonmutating
+func ResolveCommit(repo *git.Repository, rev string) (plumbing.Hash, error) {
+	if repo == nil {
+		return plumbing.ZeroHash, fmt.Errorf("nil repository")
+	}
+	if rev == "" {
+		return plumbing.ZeroHash, fmt.Errorf("empty revision")
+	}
+	h, err := repo.ResolveRevision(plumbing.Revision(rev))
+	if err != nil {
+		return plumbing.ZeroHash, fmt.Errorf("resolve revision %q: %w", rev, err)
+	}
+	if h == nil || h.IsZero() {
+		return plumbing.ZeroHash, fmt.Errorf("resolve revision %q: empty hash", rev)
+	}
+	return *h, nil
 }
 
 // CommitChanges returns Go file changes in one commit versus its first

@@ -11,6 +11,7 @@ import (
 	"github.com/go-git/go-billy/v5/memfs"
 	"github.com/go-git/go-billy/v5/util"
 	"github.com/go-git/go-git/v5"
+	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/go-git/go-git/v5/plumbing/object"
 	"github.com/go-git/go-git/v5/storage/memory"
 	"github.com/stretchr/testify/require"
@@ -40,16 +41,17 @@ func stage(t *testing.T, repo *git.Repository, paths ...string) {
 	}
 }
 
-func commit(t *testing.T, repo *git.Repository, msg string) {
+func commit(t *testing.T, repo *git.Repository, msg string) plumbing.Hash {
 	t.Helper()
 	wt, err := repo.Worktree()
 	require.NoError(t, err)
 	_, err = wt.Add(".")
 	require.NoError(t, err)
-	_, err = wt.Commit(msg, &git.CommitOptions{
+	h, err := wt.Commit(msg, &git.CommitOptions{
 		Author: &object.Signature{Name: "t", Email: "t@example.com", When: time.Now()},
 	})
 	require.NoError(t, err)
+	return h
 }
 
 func run(t *testing.T, repo *git.Repository, opts Options) (string, string, error) {
@@ -119,6 +121,82 @@ func TestRunRejectsBadOptions(t *testing.T) {
 	require.Error(t, err)
 	_, _, err = run(t, repo, Options{Format: "yaml"})
 	require.Error(t, err)
+	_, _, err = run(t, repo, Options{Scope: ScopeStaged, Commit: "HEAD"})
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "--commit cannot be combined")
+}
+
+func TestRunCommitIgnoresWorktree(t *testing.T) {
+	t.Parallel()
+	repo := newRepo(t)
+	write(t, repo, "a.go", "package p\nfunc f() { x := 1; _ = x }\n")
+	commit(t, repo, "first")
+	write(t, repo, "a.go", "package p\nfunc f() { y := 1; _ = y }\n")
+	second := commit(t, repo, "second")
+	write(t, repo, "a.go", "package p\nfunc f() { z := 1; _ = z }\n")
+
+	stdout, stderr, err := run(t, repo, Options{Commit: second.String()})
+	require.NoError(t, err)
+	require.Empty(t, stderr)
+	require.Contains(t, stdout, "scope: commit "+second.String())
+	require.Contains(t, stdout, "a.go: rename variable x to y in f")
+	require.NotContains(t, stdout, "z")
+}
+
+func TestRunCommitHEAD(t *testing.T) {
+	t.Parallel()
+	repo := newRepo(t)
+	write(t, repo, "a.go", "package p\nfunc f() { x := 1; _ = x }\n")
+	commit(t, repo, "first")
+	write(t, repo, "a.go", "package p\nfunc f() { y := 1; _ = y }\n")
+	head := commit(t, repo, "second")
+	write(t, repo, "a.go", "package p\nfunc f() { z := 1; _ = z }\n")
+	stage(t, repo, "a.go")
+
+	stdout, _, err := run(t, repo, Options{Commit: "HEAD"})
+	require.NoError(t, err)
+	require.Contains(t, stdout, "scope: commit "+head.String())
+	require.Contains(t, stdout, "rename variable x to y")
+	require.NotContains(t, stdout, "z")
+}
+
+func TestRunCommitUnknownRevision(t *testing.T) {
+	t.Parallel()
+	repo := newRepo(t)
+	write(t, repo, "a.go", "package p\nfunc f() {}\n")
+	commit(t, repo, "first")
+
+	_, _, err := run(t, repo, Options{Commit: "not-a-commit"})
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "not-a-commit")
+}
+
+func TestRunCommitJSON(t *testing.T) {
+	t.Parallel()
+	repo := newRepo(t)
+	write(t, repo, "a.go", "package p\nfunc f() { x := 1; _ = x }\n")
+	commit(t, repo, "first")
+	write(t, repo, "a.go", "package p\nfunc f() { y := 1; _ = y }\n")
+	second := commit(t, repo, "second")
+
+	stdout, _, err := run(t, repo, Options{Commit: "HEAD", Format: FormatJSON})
+	require.NoError(t, err)
+	var report struct {
+		Scope    string `json:"scope"`
+		Commit   string `json:"commit"`
+		Files    int    `json:"files"`
+		Findings []struct {
+			Kind        string `json:"kind"`
+			File        string `json:"file"`
+			Description string `json:"description"`
+		} `json:"findings"`
+	}
+	require.NoError(t, json.Unmarshal([]byte(stdout), &report))
+	require.Equal(t, "commit", report.Scope)
+	require.Equal(t, second.String(), report.Commit)
+	require.Equal(t, 1, report.Files)
+	require.Len(t, report.Findings, 1)
+	require.Contains(t, report.Findings[0].Description, "x to y")
 }
 
 func TestRunRejectsNilRepo(t *testing.T) {
@@ -197,6 +275,40 @@ func TestExecuteOnDiskRepoObservesStaged(t *testing.T) {
 	require.Contains(t, stdout.String(), "rename variable x to y")
 }
 
+func TestExecuteOnDiskRepoObservesCommit(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	repo, err := git.PlainInit(dir, false)
+	require.NoError(t, err)
+	wt, err := repo.Worktree()
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(dir+"/a.go",
+		[]byte("package p\nfunc f() { x := 1; _ = x }\n"), 0o644))
+	_, err = wt.Add("a.go")
+	require.NoError(t, err)
+	_, err = wt.Commit("first", &git.CommitOptions{
+		Author: &object.Signature{Name: "t", Email: "t@example.com", When: time.Now()},
+	})
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(dir+"/a.go",
+		[]byte("package p\nfunc f() { y := 1; _ = y }\n"), 0o644))
+	_, err = wt.Add("a.go")
+	require.NoError(t, err)
+	head, err := wt.Commit("second", &git.CommitOptions{
+		Author: &object.Signature{Name: "t", Email: "t@example.com", When: time.Now()},
+	})
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(dir+"/a.go",
+		[]byte("package p\nfunc f() { z := 1; _ = z }\n"), 0o644))
+
+	var stdout, stderr bytes.Buffer
+	require.NoError(t, Execute(context.Background(),
+		[]string{"--repo", dir, "--commit", "HEAD"}, &stdout, &stderr, "dev"))
+	require.Contains(t, stdout.String(), "scope: commit "+head.String())
+	require.Contains(t, stdout.String(), "rename variable x to y")
+	require.NotContains(t, stdout.String(), "z")
+}
+
 func TestRootCmdVersion(t *testing.T) {
 	t.Parallel()
 	cmd := NewRootCmd("v1.2.3")
@@ -222,4 +334,7 @@ func TestRootCmdDefaults(t *testing.T) {
 	format, err := cmd.Flags().GetString("format")
 	require.NoError(t, err)
 	require.Equal(t, "text", format)
+	commitFlag, err := cmd.Flags().GetString("commit")
+	require.NoError(t, err)
+	require.Empty(t, commitFlag)
 }
