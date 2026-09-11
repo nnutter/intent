@@ -377,30 +377,18 @@ func hashStmtListOf(list []ast.Stmt, norm identNormalizer) uint64 {
 	return h.h.Sum64()
 }
 
-// hashStmtOf returns a position-independent hash of a single statement.
-//
-//constable:nonmutating
-func hashStmtOf(s ast.Stmt, norm identNormalizer) uint64 {
-	h := newHasher(norm)
-	h.hashStmt(s)
-	return h.h.Sum64()
-}
-
 // isTrivialExpr reports whether an expression is too small to be a
 // meaningful extract-variable candidate (a bare identifier or literal).
 //
 //constable:nonmutating
 func isTrivialExpr(e ast.Expr) bool {
-	switch e.(type) {
+	switch e := e.(type) {
 	case nil:
 		return true
 	case *ast.Ident, *ast.BasicLit:
 		return true
 	case *ast.ParenExpr:
-		if p, ok := e.(*ast.ParenExpr); ok {
-			return isTrivialExpr(p.X)
-		}
-		return false
+		return isTrivialExpr(e.X)
 	default:
 		return false
 	}

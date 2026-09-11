@@ -79,7 +79,9 @@ func Run(
 		return err
 	}
 	if detectErr != nil {
-		fmt.Fprintf(stderr, "warning: some files were skipped: %v\n", detectErr)
+		if _, err := fmt.Fprintf(stderr, "warning: some files were skipped: %v\n", detectErr); err != nil {
+			return err
+		}
 	}
 	return nil
 }
